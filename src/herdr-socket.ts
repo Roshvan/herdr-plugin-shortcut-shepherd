@@ -92,10 +92,17 @@ function readLines(socket: Socket, options: SocketOptions): SocketLines {
 
 type Connection = { readonly socket: Socket; readonly lines: SocketLines };
 
+function localSocketPath(path: string, platform: NodeJS.Platform): string {
+  const pipePrefix = "\\\\.\\pipe\\";
+  // Herdr 0.8.0/current use interprocess 2.4.2 GenericNamespaced, whose
+  // convert_and_encode_path prepends this prefix without normalizing the name.
+  return platform === "win32" && !path.startsWith(pipePrefix) ? `${pipePrefix}${path}` : path;
+}
+
 async function connect(target: SocketTarget, options: SocketOptions): Promise<Result<Connection, SocketFailure>> {
   if (options.signal?.aborted) return err(failure("ABORTED", "socket operation cancelled"));
   return new Promise((resolve) => {
-    const socket = isString(target) ? createConnection(target) : createConnection(target);
+    const socket = isString(target) ? createConnection(localSocketPath(target, process.platform)) : createConnection(target);
     const lines = readLines(socket, options);
     const timer = setTimeout(() => { lines.close(); resolve(err(failure("TIMEOUT", "socket connect deadline exceeded"))); }, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
     const finish = (result: Result<Connection, SocketFailure>) => { clearTimeout(timer); resolve(result); };

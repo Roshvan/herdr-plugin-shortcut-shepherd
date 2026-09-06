@@ -13,7 +13,3 @@ export function ok<T>(value: T): Ok<T> {
 export function err<E extends Failure>(error: E): Err<E> {
   return { _tag: "err", error };
 }
-
-export function casesHandled(unexpectedCase: never): never {
-  throw new Error(`Unhandled case: ${JSON.stringify(unexpectedCase)}`);
-}

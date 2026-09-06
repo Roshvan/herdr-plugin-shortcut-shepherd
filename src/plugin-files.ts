@@ -14,7 +14,6 @@ export type PluginPaths = {
   readonly sessionDir: string;
   readonly controlPort: number;
   readonly secret: string;
-  readonly legacyLock: string;
   readonly config: string;
   readonly control: string;
   readonly stats: string;
@@ -30,7 +29,6 @@ export function pluginPaths(env: PluginEnv): PluginPaths {
     sessionId, sessionDir,
     controlPort: 20000 + Number.parseInt(digest.slice(0, 8), 16) % 40000,
     secret: join(sessionDir, "control.key"),
-    legacyLock: join(env.stateDir, "daemon.lock"),
     config: join(env.configDir, "config.json"),
     control: join(sessionDir, "control.json"),
     stats: join(sessionDir, "stats.json"),
@@ -67,7 +65,7 @@ export async function loadControl(paths: PluginPaths): Promise<Result<Control, I
   return raw._tag === "err" ? raw : parseControl(raw.value);
 }
 
-/** Read this session's counters without migrating ambiguous legacy counts. */
+/** Read this session's current-format counters; malformed snapshots remain untouched. */
 export async function loadStats(paths: PluginPaths, now: number): Promise<Result<Stats, InvalidStateFile | JsonFileUnreadable>> {
   const raw = await readJsonFile(paths.stats);
   return raw._tag === "err" ? raw : parseStats(raw.value, now);

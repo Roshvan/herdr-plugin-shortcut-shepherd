@@ -31,6 +31,11 @@ function fallbackHomes(env: NodeJS.ProcessEnv) {
   };
 }
 
+function resolveSocketPath(path: string, platform: NodeJS.Platform): string {
+  // Windows logical names are opaque: resolving them changes the named pipe identity.
+  return platform === "win32" || path.startsWith("\\\\.\\pipe\\") ? path : resolve(path);
+}
+
 /** Parse environment once at an entrypoint. Invoking outside Herdr fails closed. */
 export function resolvePluginEnv(env: NodeJS.ProcessEnv): Result<PluginEnv, InvalidPluginEnv> {
   const socketPath = nonEmpty(env["HERDR_SOCKET_PATH"]);
@@ -38,7 +43,7 @@ export function resolvePluginEnv(env: NodeJS.ProcessEnv): Result<PluginEnv, Inva
   const homes = fallbackHomes(env);
   const pluginId = nonEmpty(env["HERDR_PLUGIN_ID"]) ?? PLUGIN_ID;
   const values: PluginEnv = {
-    socketPath: socketPath.startsWith("\\\\.\\pipe\\") ? socketPath : resolve(socketPath),
+    socketPath: resolveSocketPath(socketPath, process.platform),
     herdrBin: nonEmpty(env["HERDR_BIN_PATH"]) ?? "herdr",
     pluginId,
     pluginRoot: resolve(nonEmpty(env["HERDR_PLUGIN_ROOT"]) ?? dirname(dirname(fileURLToPath(import.meta.url)))),

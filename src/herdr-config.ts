@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { homedir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse as parseToml, TomlError } from "smol-toml";
 import { buildKeymap, isHerdrActionId, type HerdrActionId, type Keymap, type KeyOverrides } from "./keymap.ts";
@@ -14,11 +14,19 @@ function unavailable(detail: string): KeymapUnavailable {
   return { _tag: "KeymapUnavailable", message: `Herdr keybindings unavailable: ${detail}` };
 }
 
-/** Locate Herdr's documented config file, respecting an explicit host override. */
+/** Locate a release build's Herdr config using its explicit override and platform directory precedence. */
 export function locateHerdrConfig(override: string | undefined, platform: NodeJS.Platform, env: NodeJS.ProcessEnv): string {
   if (override !== undefined) return override;
-  if (platform === "win32") return join(env["APPDATA"] || join(homedir(), "AppData", "Roaming"), "herdr", "config.toml");
-  return join(homedir(), ".config", "herdr", "config.toml");
+  const xdgConfigHome = env["XDG_CONFIG_HOME"];
+  if (xdgConfigHome !== undefined) return join(xdgConfigHome, "herdr", "config.toml");
+  if (platform === "win32") {
+    const appData = env["APPDATA"];
+    if (appData !== undefined) return join(appData, "herdr", "config.toml");
+    const profile = env["USERPROFILE"];
+    if (profile !== undefined) return join(profile, "AppData", "Roaming", "herdr", "config.toml");
+  }
+  const home = env["HOME"];
+  return home !== undefined ? join(home, ".config", "herdr", "config.toml") : join(tmpdir(), "herdr", "config.toml");
 }
 
 function hasControlCharacters(value: string): boolean {
@@ -47,8 +55,7 @@ function projectKeys(value: JsonValue): Result<KeyOverrides, KeymapUnavailable> 
   if (!isJsonObject(value)) return err(unavailable("root must be a table"));
   const keys = value["keys"] ?? {};
   if (!isJsonObject(keys)) return err(unavailable("keys must be a table"));
-  // Older [keys.indexed] semantics are intentionally not guessed.
-  if (keys["indexed"] !== undefined) return err(unavailable("migrate legacy [keys.indexed] to explicit switch_tab/switch_workspace bindings"));
+  if (keys["indexed"] !== undefined) return err(unavailable("[keys.indexed] is unsupported; use explicit keys.switch_tab and keys.switch_workspace binding strings or string arrays"));
   const bindings = new Map<HerdrActionId, ReadonlyArray<string>>();
   for (const [id, raw] of Object.entries(keys)) {
     if (!isHerdrActionId(id)) continue;

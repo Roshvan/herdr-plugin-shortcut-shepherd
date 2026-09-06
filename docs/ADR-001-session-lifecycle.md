@@ -5,9 +5,8 @@ Status: accepted for 0.2.0-alpha.1.
 ## Context and existing seams checked
 
 Herdr installs plugins globally, shares their config/state roots across sessions, and invokes
-startup hooks per server. Hooks are one-shot initialization, not daemon supervision. The previous
-`plugin-files.ts` mixed persistence with a global PID lock; `actions/watcher.ts` detached a process
-without observing readiness. `stop.ts` signalled whichever process happened to have the saved PID.
+startup hooks per server. Hooks are one-shot initialization, not daemon supervision. The plugin
+therefore needs exclusive session ownership and explicit startup/shutdown acknowledgments.
 
 We inspected/reused the existing JSON, Herdr socket, CLI, input-monitor, keymap, inference, policy,
 and Shepherd modules. The functional inference/policy core remains. The change does not introduce
@@ -45,15 +44,19 @@ and session; stop additionally checks the running instance's random identity. PI
 The manifest runs `actions/start.ts`, a one-shot launcher. The child acknowledges readiness only after
 it owns the control endpoint, parses config/state, subscribes, and obtains an initial Herdr snapshot.
 Concurrent contenders wait for the authenticated winner rather than creating a second writer.
+Repeated start waits for an existing owner's subscription and snapshot to reconnect. Transport
+readiness is separate from the quiet-period handshake required before counting.
 
-A stopping instance rejects new mutations, drains earlier serialized work, saves pending stats,
-stops its input helper, cancels streams/timers, and releases ownership. A failed final save retains
-ownership/state and reports failure so the user can repair storage. Startup no longer equates
-successful spawn with successful startup; stop no longer equates sending a signal with completion.
+A stopping instance closes ingestion immediately and rejects new mutations. It drains earlier
+serialized work and accepted inference at the real settlement deadlines without emitting nudges,
+cleans up its input helper and streams, then saves before releasing ownership. A failed final save
+retains ownership and pending statistics for another stop attempt; ingestion remains closed.
+Slow shutdown replies with a bounded error while its in-flight save continues. Successful spawn
+is not successful startup, and sending a signal is not proof of shutdown.
 
 The host still does not supervise daemon lifetime. Users must stop each session before disabling or
-uninstalling. Legacy PID locks deliberately require human verification and removal; the new code
-will neither signal their contents nor pretend old ambiguous counters have precise attribution.
+uninstalling. Only authenticated session ownership and the current session-local storage format are
+supported; there is no PID-lock lookup or import from global state files.
 
 ### One writer per session, explicit failure contracts
 
@@ -63,12 +66,15 @@ share a serial executor. The UI/actions use the control channel rather than edit
 
 Shepherd's persistence port returns `Result`; failed writes stay dirty, overlapping flushes are
 serialized, and an old completed save cannot mark a newer revision saved. Atomic replacements use
-unique private temporary files. Corrupt startup state is left untouched and reported. These files
-are periodic snapshots, not a power-loss-proof event journal.
+unique private temporary files. Only absent files receive initial defaults. Existing snapshots must
+contain the fields emitted by the current serializers; null roots and missing counters are errors.
+Corrupt startup state is left untouched and reported. These files are periodic snapshots, not a
+power-loss-proof event journal.
 
 Socket adapters bound connect/response time, line size, and subscription backlog. CLI adapters bound
-child time/output and only terminate child handles they created. Expected failures are values at the
-owning boundary. A subscription lease rotates even quiet streams, followed by replay warm-up and a
+child time/output and only terminate child handles they created. The Windows socket adapter maps
+Herdr's logical name to the same named-pipe address as its interprocess transport, without path
+normalization. Expected failures are values at the owning boundary. A subscription lease rotates even quiet streams, followed by replay warm-up and a
 successful resnapshot before counting; activity during this conservative recovery can be missed.
 
 ### Attribution is a capability, not inferred certainty
@@ -88,7 +94,8 @@ The handwritten TOML subset was removed from the keymap domain module. `herdr-co
 `smol-toml` parsing/projection and redacted diagnostics. The last acknowledged keymap remains installed
 on errors. Disk changes suspend nudges until the user reloads Herdr and explicitly refreshes Shepherd.
 No inspected Herdr API exposes effective keymap state, so the UI calls these configured suggestions.
-Legacy indexed syntax is rejected with migration guidance rather than silently guessed.
+Configuration paths follow Herdr's explicit override, XDG, and platform-default precedence.
+Unsupported indexed binding tables are rejected rather than silently guessed.
 
 `string-width` supplies terminal-cell measurements in the presentation adapter; truncation respects
 grapheme boundaries and removes control characters. These maintained dependencies are an intentional
@@ -100,5 +107,7 @@ The owner requested no tests. The repository contains no automated test suite, f
 `pnpm check` and CI perform typecheck/lint only. CI is configured for macOS/Linux/Windows and Node
 22.18/24/26, but static checks do not certify runtime behavior.
 
-Real Herdr lifecycle/UI behavior, native Windows/Linux operation, optional macOS input estimates,
-and the public repository/topic/tag still need an operational review before release. See RELEASE.md.
+A real macOS Herdr run-through on Node 22.18 covered startup, repeated start, subscription rotation,
+popup controls, configuration/binding refresh, input-helper start/stop, pending-event shutdown, and
+restart with saved statistics. Native Windows/Linux operation and eventual public distribution still
+need their own operational confirmation. See RELEASE.md.

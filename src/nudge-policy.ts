@@ -52,8 +52,8 @@ function nonnegativeInteger(value: JsonValue | undefined): number | undefined {
 
 function parseCounters(value: JsonObject): Counters | undefined {
   const count = nonnegativeInteger(value["count"]);
-  const hits = nonnegativeInteger(value["hits"] ?? 0);
-  const unknown = nonnegativeInteger(value["unknown"] ?? 0);
+  const hits = nonnegativeInteger(value["hits"]);
+  const unknown = nonnegativeInteger(value["unknown"]);
   const nudges = nonnegativeInteger(value["nudges"]);
   const lastSeenAt = nonnegativeInteger(value["lastSeenAt"]);
   if (count === undefined || hits === undefined || unknown === undefined || nudges === undefined || lastSeenAt === undefined) return undefined;
@@ -63,7 +63,7 @@ function parseCounters(value: JsonObject): Counters | undefined {
 function parseActionStats(value: JsonValue): ActionStats | undefined {
   if (!isJsonObject(value)) return undefined;
   const counters = parseCounters(value);
-  const rawLastNudgedAt = value["lastNudgedAt"] ?? null;
+  const rawLastNudgedAt = value["lastNudgedAt"];
   const lastNudgedAt = nonnegativeInteger(rawLastNudgedAt);
   if (counters === undefined || (rawLastNudgedAt !== null && lastNudgedAt === undefined)) return undefined;
   return { ...counters, lastNudgedAt };
@@ -81,7 +81,7 @@ function parseActionsMap(value: JsonValue | undefined): Result<ReadonlyMap<Herdr
   return ok(actions);
 }
 
-function parseRecentNudges(value: JsonValue): Result<ReadonlyArray<number>, InvalidStateFile> {
+function parseRecentNudges(value: JsonValue | undefined): Result<ReadonlyArray<number>, InvalidStateFile> {
   if (!isJsonArray(value)) return err(invalidStateFile("stats", "recentNudges"));
   const out: number[] = [];
   for (const item of value) {
@@ -94,13 +94,13 @@ function parseRecentNudges(value: JsonValue): Result<ReadonlyArray<number>, Inva
 
 /** Parse nonnegative integer counters/timestamps; absent files start a fresh history. */
 export function parseStats(value: JsonValue | undefined, now: number): Result<Stats, InvalidStateFile> {
-  if (value === undefined || value === null) return ok(emptyStats(now));
+  if (value === undefined) return ok(emptyStats(now));
   if (!isJsonObject(value)) return err(invalidStateFile("stats", "root"));
   const since = nonnegativeInteger(value["since"]);
   if (since === undefined) return err(invalidStateFile("stats", "since"));
   const actions = parseActionsMap(value["actions"]);
   if (actions._tag === "err") return actions;
-  const recentNudges = parseRecentNudges(value["recentNudges"] ?? []);
+  const recentNudges = parseRecentNudges(value["recentNudges"]);
   if (recentNudges._tag === "err") return recentNudges;
   return ok({ since, actions: actions.value, recentNudges: recentNudges.value });
 }
@@ -119,7 +119,7 @@ export function statsToJson(stats: Stats) {
   };
 }
 
-function parseMuted(raw: JsonValue): Result<ReadonlySet<HerdrActionId>, InvalidStateFile> {
+function parseMuted(raw: JsonValue | undefined): Result<ReadonlySet<HerdrActionId>, InvalidStateFile> {
   if (!isJsonArray(raw)) return err(invalidStateFile("control", "muted"));
   const muted = new Set<HerdrActionId>();
   for (const id of raw) {
@@ -129,13 +129,13 @@ function parseMuted(raw: JsonValue): Result<ReadonlySet<HerdrActionId>, InvalidS
   return ok(muted);
 }
 
-/** Parse session-local control state; unknown legacy fields are not used as commands. */
+/** Parse session-local control state; unknown fields are not used as commands. */
 export function parseControl(value: JsonValue | undefined): Result<Control, InvalidStateFile> {
-  if (value === undefined || value === null) return ok(DEFAULT_CONTROL);
+  if (value === undefined) return ok(DEFAULT_CONTROL);
   if (!isJsonObject(value)) return err(invalidStateFile("control", "root"));
-  const paused = value["paused"] ?? false;
+  const paused = value["paused"];
   if (!isBoolean(paused)) return err(invalidStateFile("control", "paused"));
-  const muted = parseMuted(value["muted"] ?? []);
+  const muted = parseMuted(value["muted"]);
   return muted._tag === "err" ? muted : ok({ paused, muted: muted.value });
 }
 

@@ -1,23 +1,11 @@
 import { spawn } from "node:child_process";
-import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { isJsonObject, stringField, type JsonValue } from "./json.ts";
+import { isJsonObject, stringField, type JsonObject, type JsonValue } from "./json.ts";
 import type { PluginEnv } from "./plugin-env.ts";
 import type { PluginPaths } from "./plugin-files.ts";
 import { callWatcher, readControlSecret, watcherStatus, type WatcherUnavailable } from "./watcher-control.ts";
 import { ok, err, type Result } from "./result.ts";
-
-/** Refuse automatic migration of a bare legacy PID lock; never signal its contents. */
-export async function checkLegacyWatcher(paths: PluginPaths): Promise<Result<void, WatcherUnavailable>> {
-  try {
-    await lstat(paths.legacyLock);
-    return err({ _tag: "WatcherUnavailable", code: "LEGACY_WATCHER", message: `Legacy watcher lock exists at ${paths.legacyLock}. Verify the old watcher is stopped, then move that lock aside. No PID was signalled.` });
-  } catch (cause) {
-    if (cause instanceof Error && "code" in cause && cause.code === "ENOENT") return ok(undefined);
-    return err({ _tag: "WatcherUnavailable", code: "LEGACY_UNREADABLE", message: `Cannot inspect ${paths.legacyLock}` });
-  }
-}
 
 function startChild(env: PluginEnv, inherited: NodeJS.ProcessEnv): Promise<Result<string, WatcherUnavailable>> {
   return new Promise((resolve) => {
@@ -47,19 +35,49 @@ function startChild(env: PluginEnv, inherited: NodeJS.ProcessEnv): Promise<Resul
   });
 }
 
-/** Ensure exactly one ready watcher in this session; detached spawn alone is not success. */
+function isReady(status: JsonObject | undefined): boolean {
+  return status?.["state"] === "ready" && status["connection"] === "connected";
+}
+
+async function statusBefore(paths: PluginPaths, deadline: number): Promise<Result<JsonObject | undefined, WatcherUnavailable>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<Result<JsonObject | undefined, WatcherUnavailable>>((resolve) => {
+    timer = setTimeout(() => resolve(err({ _tag: "WatcherUnavailable", code: "STATUS_TIMEOUT", message: "Authenticated watcher status deadline exceeded" })), Math.max(0, deadline - performance.now()));
+  });
+  // The adapter's own deadline still bounds an in-flight read after this caller times out.
+  try { return await Promise.race([watcherStatus(paths), timeout]); }
+  finally { clearTimeout(timer); }
+}
+
+/** Wait at most ten seconds for authenticated subscription/snapshot readiness; never spawn a contender. */
+export async function waitForWatcherReady(paths: PluginPaths): Promise<Result<string, WatcherUnavailable>> {
+  const deadline = performance.now() + 10000;
+  while (performance.now() < deadline) {
+    const status = await statusBefore(paths, deadline);
+    if (status._tag === "err") return status;
+    if (isReady(status.value)) return ok(`Watcher ready for session ${paths.sessionId}.`);
+    const phase = status.value?.["state"];
+    if (phase === "failed" || phase === "stop-failed" || phase === "stopping" || phase === "stopped") {
+      return err({ _tag: "WatcherUnavailable", code: "OWNER_NOT_READY", message: `Authenticated watcher is ${phase}; resolve shutdown before starting again` });
+    }
+    await sleep(Math.min(100, Math.max(0, deadline - performance.now())));
+  }
+  return err({ _tag: "WatcherUnavailable", code: "READY_TIMEOUT", message: "No authenticated watcher became ready before the deadline; an existing owner was left in place. Retry start after it reconnects." });
+}
+
+/** Spawn only when no authenticated owner exists; an existing owner's readiness must be awaited. */
 export async function startWatcher(env: PluginEnv, paths: PluginPaths, inherited: NodeJS.ProcessEnv): Promise<Result<string, WatcherUnavailable>> {
-  const legacy = await checkLegacyWatcher(paths);
-  if (legacy._tag === "err") return legacy;
-  const status = await watcherStatus(paths);
+  const status = await statusBefore(paths, performance.now() + 10000);
   if (status._tag === "err") return status;
-  if (status.value?.["state"] === "ready") return ok(`Watcher ready for session ${paths.sessionId}.`);
+  if (isReady(status.value)) return ok(`Watcher ready for session ${paths.sessionId}.`);
+  if (status.value !== undefined) return waitForWatcherReady(paths);
   return startChild(env, inherited);
 }
 
 async function waitForRelease(paths: PluginPaths, instance: string): Promise<Result<string, WatcherUnavailable>> {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const current = await watcherStatus(paths);
+  const deadline = performance.now() + 2000;
+  while (performance.now() < deadline) {
+    const current = await statusBefore(paths, deadline);
     if (current._tag === "err") return current;
     if (current.value === undefined || current.value["instance"] !== instance) return ok("Watcher stopped; statistics saved.");
     await sleep(50);
@@ -69,12 +87,9 @@ async function waitForRelease(paths: PluginPaths, instance: string): Promise<Res
 
 /** Stop only an authenticated instance and wait until that instance releases its endpoint. */
 export async function stopWatcher(paths: PluginPaths): Promise<Result<string, WatcherUnavailable>> {
-  const status = await watcherStatus(paths);
+  const status = await statusBefore(paths, performance.now() + 10000);
   if (status._tag === "err") return status;
-  if (status.value === undefined) {
-    const legacy = await checkLegacyWatcher(paths);
-    return legacy._tag === "err" ? legacy : ok("Watcher is not running in this session.");
-  }
+  if (status.value === undefined) return ok("Watcher is not running in this session.");
   const instance = stringField(status.value, "instance");
   if (instance === undefined) return err({ _tag: "WatcherUnavailable", code: "IDENTITY_MISMATCH", message: "Watcher did not provide an instance identity" });
   const secret = await readControlSecret(paths);

@@ -17,6 +17,14 @@ The manifest's production dependency command is:
 pnpm install --prod --frozen-lockfile --ignore-scripts
 ```
 
+## Completed manual review
+
+On macOS with Node 22.18 and Herdr 0.8.2-preview, an isolated configuration/session covered native
+GitHub installation, the updated local checkout's startup and repeated start, subscription rotation,
+the real stats popup, pause/mute controls, binding reload, input-helper start/stop, shutdown immediately
+after an action, and restart with saved statistics. No automated tests or fixtures were introduced.
+Normal Herdr configuration and user state were kept separate from that review.
+
 ## Operational review before release
 
 - Review the manifest, runtime source, and dependency lockfile as ordinary unsandboxed user code.
@@ -27,8 +35,6 @@ pnpm install --prod --frozen-lockfile --ignore-scripts
 - Keep local macOS input estimates opt-in. Remote clients cannot be observed through the server's
   OS helper; Linux/Windows currently retain unknown input rather than pretending it is mouse use.
 - Review Windows state-directory ACLs, hard-link publication, and named-pipe compatibility.
-- Verify an old 0.1.0 watcher is stopped before archiving its legacy PID lock. The new code will
-  never signal a process based on that file or silently migrate ambiguous legacy counts.
 - Stop each session's watcher before disabling, unlinking, uninstalling, or replacing its source.
 - Preserve state backups when repairing corrupt files. A failed final save deliberately prevents
   a successful stop acknowledgment rather than silently losing pending statistics.
@@ -51,5 +57,5 @@ pnpm install --prod --frozen-lockfile --ignore-scripts
 - [ ] Update the README's private-repository instructions only after public installation succeeds.
 - [ ] Confirm marketplace discovery after publication. Discovery refreshes about every 30 minutes;
       listing is not security vetting.
-- [ ] Announce this as an alpha with explicit session-local state, legacy-lock migration, monitoring-off
-      default, remote limitations, configured-not-effective keymap, and subscription recovery gaps.
+- [ ] Document session-local state, opt-in monitoring, remote limitations, configured-not-effective
+      keymaps, and subscription recovery gaps.

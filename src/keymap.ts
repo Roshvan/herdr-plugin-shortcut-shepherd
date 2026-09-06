@@ -51,9 +51,6 @@ const SPECS: ReadonlyArray<ActionSpec> = [
 const SPEC_BY_ID: ReadonlyMap<HerdrActionId, ActionSpec> = new Map(SPECS.map((spec) => [spec.id, spec]));
 const ACTION_IDS: ReadonlySet<string> = new Set(SPECS.map((spec) => spec.id));
 
-/** Supported action catalog in display order. */
-export const ALL_ACTIONS: ReadonlyArray<ActionSpec> = SPECS;
-
 /** Look up the meaning of a parsed action ID. */
 export function actionSpec(id: HerdrActionId): ActionSpec {
   const spec = SPEC_BY_ID.get(id);

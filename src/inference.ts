@@ -31,6 +31,7 @@ export const INFERENCE = {
 
 type Stamped = { readonly event: HerdrEvent; readonly at: number };
 
+/** Owned topology and delayed events; snapshot revisions keep reconnect warm-up attempts distinct. */
 export type InferenceState = {
   readonly workspaces: WorkspaceId[];
   readonly worktreeWorkspaces: Set<WorkspaceId>;
@@ -46,6 +47,7 @@ export type InferenceState = {
   recentDetectionTimes: number[];
   stormUntil: number;
   warmupUntil: number;
+  warmupRevision: number;
   warmedUp: boolean;
   droppedAsAutomation: number;
   droppedInWarmup: number;
@@ -67,13 +69,16 @@ export function createInference(): InferenceState {
     recentDetectionTimes: [],
     stormUntil: 0,
     warmupUntil: 0,
+    warmupRevision: 0,
     warmedUp: true,
     droppedAsAutomation: 0,
     droppedInWarmup: 0,
   };
 }
 
+/** Suspend attribution until a quiet-period snapshot succeeds, invalidating earlier snapshot attempts. */
 export function beginWarmup(state: InferenceState, now: number): void {
+  state.warmupRevision += 1;
   state.warmupUntil = now + INFERENCE.warmupMs;
   state.warmedUp = false;
 }
@@ -83,13 +88,14 @@ export function installSnapshot(state: InferenceState, snapshot: SessionSnapshot
   loadSnapshot(state, snapshot);
 }
 
-/** Replace inferred topology with an authoritative snapshot, discarding superseded queued events. */
+/** End warm-up with an authoritative snapshot, discarding superseded queued events. */
 export function resyncSnapshot(state: InferenceState, snapshot: SessionSnapshot): void {
   // A snapshot supersedes queued events received before it. Replaying them afterward
   // would apply old topology to the newer snapshot and fabricate detections.
   state.pending = [];
   state.recent = [];
   loadSnapshot(state, snapshot);
+  state.warmedUp = true;
 }
 
 function loadSnapshot(state: InferenceState, snapshot: SessionSnapshot): void {
@@ -125,19 +131,29 @@ export function observe(state: InferenceState, event: HerdrEvent, at: number): v
     state.recent = [];
     beginWarmup(state, at);
   }
-  if (!state.warmedUp && at < state.warmupUntil) state.warmupUntil = Math.max(state.warmupUntil, at + INFERENCE.replayQuietMs);
+  if (!state.warmedUp) {
+    // Any replay activity invalidates a quiet-period snapshot already in flight.
+    state.warmupRevision += 1;
+    state.warmupUntil = Math.max(state.warmupUntil, at + INFERENCE.replayQuietMs);
+  }
   state.pending.push({ event, at });
   state.recent.push({ event, at });
 }
 
+/** Whether the quiet period permits a snapshot attempt; only its success ends uncertainty. */
 export function warmupJustEnded(state: InferenceState, now: number): boolean {
-  if (state.warmedUp || now < state.warmupUntil) return false;
-  state.warmedUp = true;
-  return true;
+  return !state.warmedUp && now >= state.warmupUntil;
 }
 
 export type Detected = { readonly detection: Detection; readonly at: number };
 
+/** Earliest real clock time at which the queue head can settle; undefined means drained. */
+export function nextSettlementAt(state: InferenceState): number | undefined {
+  const head = state.pending[0];
+  return head === undefined ? undefined : head.at + settleDelayFor(head.event);
+}
+
+/** Settle mature events in order at the supplied real clock time; unresolved warm-up stays uncounted. */
 export function settle(state: InferenceState, now: number): ReadonlyArray<Detected> {
   const detections: Detected[] = [];
   while (state.pending.length > 0) {
@@ -165,7 +181,7 @@ export function takeWarmupDroppedCount(state: InferenceState): number {
 }
 
 function isHumanPaced(state: InferenceState, detection: Detection, at: number): boolean {
-  if (at < state.warmupUntil) {
+  if (!state.warmedUp || at < state.warmupUntil) {
     state.droppedInWarmup += 1;
     return false;
   }

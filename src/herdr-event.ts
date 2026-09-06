@@ -366,17 +366,18 @@ function optionalId<T>(obj: JsonObject, key: string, brand: (raw: string) => T):
   return raw === undefined ? undefined : brand(raw);
 }
 
+/** Parse Herdr's wrapped session snapshot with all required topology collections. */
 export function parseSessionSnapshot(value: JsonValue): Result<SessionSnapshot, MalformedSessionSnapshot> {
   if (!isJsonObject(value)) return err(malformedSessionSnapshot("result"));
-  const nested = value["snapshot"];
-  const inner = isJsonObject(nested) ? nested : value;
+  const inner = value["snapshot"];
+  if (!isJsonObject(inner)) return err(malformedSessionSnapshot("snapshot"));
   const workspaces = parseRecordList(inner["workspaces"], parseWorkspaceRecord);
   if (workspaces === undefined) return err(malformedSessionSnapshot("workspaces"));
   const tabs = parseRecordList(inner["tabs"], parseTabRecord);
   if (tabs === undefined) return err(malformedSessionSnapshot("tabs"));
   const panes = parseRecordList(inner["panes"], parsePaneRecord);
   if (panes === undefined) return err(malformedSessionSnapshot("panes"));
-  const layouts = parseRecordList(inner["layouts"] ?? [], parseTabLayout);
+  const layouts = parseRecordList(inner["layouts"], parseTabLayout);
   if (layouts === undefined) return err(malformedSessionSnapshot("layouts"));
   return ok({
     focusedWorkspaceId: optionalId(inner, "focused_workspace_id", workspaceId),

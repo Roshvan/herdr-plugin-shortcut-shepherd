@@ -37,6 +37,7 @@ export type Shepherd = {
   readonly input: InputHistory;
   readonly ports: ShepherdPorts;
   readonly persistEveryMs: number;
+  ingestion: "open" | "draining";
   stats: Stats;
   config: PluginConfig;
   control: Control;
@@ -54,6 +55,7 @@ export function createShepherd(inference: InferenceState, initial: ShepherdIniti
     input: createInputHistory(),
     ports,
     persistEveryMs,
+    ingestion: "open",
     stats: initial.stats,
     config: initial.config,
     control: initial.control,
@@ -65,13 +67,15 @@ export function createShepherd(inference: InferenceState, initial: ShepherdIniti
   };
 }
 
-/** Enqueue a parsed lifecycle event for delayed cascade inference. */
+/** Enqueue a parsed lifecycle event for delayed cascade inference until the shutdown cutoff. */
 export function observeEvent(shepherd: Shepherd, event: HerdrEvent, now: number): void {
+  if (shepherd.ingestion !== "open") return;
   observe(shepherd.inference, event, now);
 }
 
-/** Record a local timing estimate; no key contents are accepted. */
+/** Record a local timing estimate before the cutoff; no key contents are accepted. */
 export function observeInput(shepherd: Shepherd, event: InputEvent, now: number): void {
+  if (shepherd.ingestion !== "open") return;
   recordInput(shepherd.input, event, now);
 }
 
@@ -103,7 +107,7 @@ async function handleDetection(shepherd: Shepherd, detected: Detected, now: numb
     detection,
     source,
     settings: shepherd.config,
-    control: shepherd.control,
+    control: shepherd.ingestion === "draining" ? { ...shepherd.control, paused: true } : shepherd.control,
     keymap: shepherd.keymap,
     now,
   });
@@ -119,8 +123,10 @@ async function handleDetection(shepherd: Shepherd, detected: Detected, now: numb
 
 async function resyncIfDue(shepherd: Shepherd, now: number): Promise<void> {
   if (!warmupJustEnded(shepherd.inference, now)) return;
+  const revision = shepherd.inference.warmupRevision;
   shepherd.ports.log("event stream quiet; resyncing from session.snapshot before counting");
   const snapshot = await shepherd.ports.resync();
+  if (shepherd.ingestion !== "open" || revision !== shepherd.inference.warmupRevision) return;
   if (snapshot._tag === "err") {
     shepherd.ports.log(`snapshot refresh failed; counting suspended: ${snapshot.error.message}`);
     beginWarmup(shepherd.inference, now);
@@ -137,11 +143,25 @@ function logDrops(shepherd: Shepherd): void {
 }
 
 async function tickOnce(shepherd: Shepherd, now: number): Promise<void> {
+  if (shepherd.ingestion !== "open") return;
   pruneInput(shepherd.input, now);
   await resyncIfDue(shepherd, now);
+  if (shepherd.ingestion !== "open") return;
   for (const detected of settle(shepherd.inference, now)) await handleDetection(shepherd, detected, now);
   logDrops(shepherd);
   if (shepherd.dirty && now - shepherd.lastPersistAt >= shepherd.persistEveryMs) await flushShepherd(shepherd, now);
+}
+
+/** Close ingestion synchronously, preserving accepted history and suppressing subsequent nudges. */
+export function beginShepherdShutdown(shepherd: Shepherd): void {
+  shepherd.ingestion = "draining";
+}
+
+/** Settle mature accepted events under the owner's serial queue, without resnapshotting, input pruning, or nudges. */
+export async function settleShepherdShutdown(shepherd: Shepherd, now: number): Promise<void> {
+  beginShepherdShutdown(shepherd);
+  for (const detected of settle(shepherd.inference, now)) await handleDetection(shepherd, detected, now);
+  logDrops(shepherd);
 }
 
 /** Run at most one tick at a time, even when effects outlast the timer interval. */

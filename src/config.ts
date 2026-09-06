@@ -57,7 +57,7 @@ function readSuppressed(obj: JsonObject): Result<ReadonlySet<HerdrActionId>, Inv
 
 /** Parse shared settings, retaining explicit off/unknown attribution semantics. */
 export function parseConfig(value: JsonValue | undefined): Result<PluginConfig, InvalidConfig> {
-  if (value === undefined || value === null) return ok(DEFAULT_CONFIG);
+  if (value === undefined) return ok(DEFAULT_CONFIG);
   if (!isJsonObject(value)) return err(invalidConfig("root"));
   const enabled = readEnabled(value);
   if (enabled._tag === "err") return enabled;
@@ -65,7 +65,7 @@ export function parseConfig(value: JsonValue | undefined): Result<PluginConfig, 
   if (position._tag === "err") return position;
   const suppressed = readSuppressed(value);
   if (suppressed._tag === "err") return suppressed;
-  const inputMonitoring = value["inputMonitoring"] ?? "off";
+  const inputMonitoring = value["inputMonitoring"] === undefined ? DEFAULT_CONFIG.inputMonitoring : value["inputMonitoring"];
   if (inputMonitoring !== "off" && inputMonitoring !== "local-estimate") return err(invalidConfig("inputMonitoring"));
   return ok({ enabled: enabled.value, inputMonitoring, position: position.value, suppressed: suppressed.value });
 }
@@ -78,12 +78,4 @@ export function configToJson(config: PluginConfig) {
     position: config.position,
     suppressed: [...config.suppressed].toSorted(),
   };
-}
-
-/** Purely toggle a shared suppression when constructing edited configuration. */
-export function toggleSuppressed(config: PluginConfig, id: HerdrActionId): PluginConfig {
-  const suppressed = new Set(config.suppressed);
-  if (suppressed.has(id)) suppressed.delete(id);
-  else suppressed.add(id);
-  return { ...config, suppressed };
 }

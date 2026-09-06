@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { setTimeout as sleep } from "node:timers/promises";
 import { isHerdrActionId } from "./keymap.ts";
 import { stringField, type JsonObject, type JsonValue } from "./json.ts";
 import { resolvePluginEnv } from "./plugin-env.ts";
 import { pluginPaths, type PluginPaths } from "./plugin-files.ts";
-import { serveControl, ensureControlSecret, watcherStatus, type ControlServer } from "./watcher-control.ts";
-import { checkLegacyWatcher } from "./watcher-process.ts";
+import { serveControl, ensureControlSecret, type ControlServer } from "./watcher-control.ts";
+import { waitForWatcherReady } from "./watcher-process.ts";
 import { createWatcherRuntime, type WatcherRuntime } from "./watcher-runtime.ts";
 import { createWatcherLog } from "./watcher-log.ts";
 import type { CommandFailed, WatcherCommand } from "./watcher-commands.ts";
@@ -33,14 +32,15 @@ function parseCommand(method: string, args: JsonObject): Result<WatcherCommand, 
 type Owner = {
   readonly paths: PluginPaths;
   readonly instance: string;
-  phase: "starting" | "ready" | "stopping" | "stopped";
+  phase: "starting" | "running" | "stopping" | "stop-failed" | "stopped";
   runtime: WatcherRuntime | undefined;
   server: ControlServer | undefined;
 };
 
 function status(owner: Owner): JsonObject {
   const view = owner.runtime?.view();
-  const phase = owner.phase === "ready" && view?.["connection"] === "failed" ? "failed" : owner.phase;
+  const connection = view?.["connection"];
+  const phase = owner.phase === "running" ? (connection === "connected" ? "ready" : connection ?? "starting") : owner.phase;
   return { ...view, sessionId: owner.paths.sessionId, instance: owner.instance, pid: process.pid, state: phase };
 }
 
@@ -49,11 +49,19 @@ async function stop(owner: Owner): Promise<Result<JsonValue, CommandFailed>> {
   if (owner.phase === "stopping") return err(rejected("Watcher is already stopping; wait for shutdown to finish"));
   if (owner.runtime === undefined) return err(rejected("Watcher is still starting; retry shortly"));
   owner.phase = "stopping";
-  const result = await owner.runtime.stop();
-  if (result._tag === "err") { owner.phase = "ready"; return result; }
-  owner.phase = "stopped";
-  owner.server?.close();
-  return ok(status(owner));
+  const completion = owner.runtime.stop().then((result): Result<JsonValue, CommandFailed> => {
+    if (result._tag === "err") { owner.phase = "stop-failed"; return result; }
+    owner.phase = "stopped";
+    owner.server?.close();
+    return ok(status(owner));
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<Result<JsonValue, CommandFailed>>((resolve) => {
+    timer = setTimeout(() => resolve(err(rejected("Shutdown is still draining or saving; ownership retained until completion. Retry stop shortly."))), 10000);
+  });
+  // Reply before the control channel's 15-second deadline; never abandon an in-flight save.
+  try { return await Promise.race([completion, timeout]); }
+  finally { clearTimeout(timer); }
 }
 
 async function handle(owner: Owner, method: string, args: JsonObject): Promise<Result<JsonValue, CommandFailed>> {
@@ -62,7 +70,7 @@ async function handle(owner: Owner, method: string, args: JsonObject): Promise<R
     if (args["instance"] !== owner.instance) return err(rejected("Watcher instance changed; refusing to stop its replacement"));
     return stop(owner);
   }
-  if (owner.phase !== "ready" || owner.runtime === undefined) return err(rejected("Watcher is not ready"));
+  if (owner.phase !== "running" || owner.runtime === undefined) return err(rejected("Watcher is not ready"));
   const command = parseCommand(method, args);
   if (command._tag === "err") return command;
   const result = await owner.runtime.command(command.value);
@@ -70,18 +78,13 @@ async function handle(owner: Owner, method: string, args: JsonObject): Promise<R
 }
 
 async function waitForOwner(paths: PluginPaths): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const current = await watcherStatus(paths);
-    if (current._tag === "err") { notify("failed", current.error.message); return; }
-    if (current.value?.["state"] === "ready") { notify("ready", `Watcher already ready for session ${paths.sessionId}.`); return; }
-    await sleep(100);
-  }
-  notify("failed", `Control port ${paths.controlPort} is occupied but no authenticated watcher became ready. No process was signalled.`);
+  const ready = await waitForWatcherReady(paths);
+  notify(ready._tag === "ok" ? "ready" : "failed", ready._tag === "ok" ? ready.value : ready.error.message);
 }
 
 function installSignals(owner: Owner): void {
   const shutdown = () => {
-    if (owner.phase === "starting") { owner.server?.close(); process.exit(1); }
+    if (owner.runtime === undefined) { owner.server?.close(); process.exit(1); }
     void stop(owner).then((result) => {
       if (result._tag === "err") process.stderr.write(`${result.error.message}\n`);
       return undefined;
@@ -96,8 +99,6 @@ async function main(): Promise<void> {
   const env = resolvePluginEnv(process.env);
   if (env._tag === "err") { notify("failed", env.error.message); return; }
   const paths = pluginPaths(env.value);
-  const legacy = await checkLegacyWatcher(paths);
-  if (legacy._tag === "err") { notify("failed", legacy.error.message); return; }
   const secret = await ensureControlSecret(paths);
   if (secret._tag === "err") { notify("failed", secret.error.message); return; }
   const owner: Owner = { paths, instance: randomUUID(), phase: "starting", runtime: undefined, server: undefined };
@@ -112,14 +113,14 @@ async function main(): Promise<void> {
   const started = await runtime.value.start();
   if (started._tag === "err") {
     log(started.error.message);
-    await runtime.value.stop();
-    server.value.close();
+    const stopped = await stop(owner);
+    if (stopped._tag === "err") log(stopped.error.message);
     notify("failed", started.error.message);
     return;
   }
-  owner.phase = "ready";
-  log(`watcher ready for session ${paths.sessionId} (pid ${process.pid})`);
-  notify("ready", `Watcher ready for session ${paths.sessionId}.`);
+  if (owner.phase !== "starting") return;
+  owner.phase = "running";
+  await waitForOwner(paths);
 }
 
 void main().catch(() => {
