@@ -1,0 +1,6 @@
+{
+  "enabled": true,
+  "inputMonitoring": "local-estimate",
+  "position": "bottom-right",
+  "suppressed": []
+}

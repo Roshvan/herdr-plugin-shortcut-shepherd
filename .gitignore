@@ -1,0 +1,23 @@
+.DS_Store
+node_modules/
+.pnpm-store/
+.env
+.env.*
+!.env.example
+config.json
+*.log
+*.log.*
+*.tmp
+*.key
+*.tsbuildinfo
+/daemon.lock
+/stats.json
+/control.json
+/state/
+/sessions/
+
+# Local notes and screenshots from the superseded UI.
+/VAULT.md
+/stats-pane.png
+/toast-new-workspace.png
+/toast-split.png
