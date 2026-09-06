@@ -1,0 +1,89 @@
+import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { parse as parseToml, TomlError } from "smol-toml";
+import { buildKeymap, isHerdrActionId, type HerdrActionId, type Keymap, type KeyOverrides } from "./keymap.ts";
+import { isJsonArray, isJsonObject, isString, parseJsonText, type JsonValue } from "./json.ts";
+import { ok, err, type Result } from "./result.ts";
+import { readTextFile } from "./bounded-text-file.ts";
+
+/** Failure to read or interpret configured bindings; the caller must retain its last good map. */
+export type KeymapUnavailable = { readonly _tag: "KeymapUnavailable"; readonly message: string };
+
+function unavailable(detail: string): KeymapUnavailable {
+  return { _tag: "KeymapUnavailable", message: `Herdr keybindings unavailable: ${detail}` };
+}
+
+/** Locate Herdr's documented config file, respecting an explicit host override. */
+export function locateHerdrConfig(override: string | undefined, platform: NodeJS.Platform, env: NodeJS.ProcessEnv): string {
+  if (override !== undefined) return override;
+  if (platform === "win32") return join(env["APPDATA"] || join(homedir(), "AppData", "Roaming"), "herdr", "config.toml");
+  return join(homedir(), ".config", "herdr", "config.toml");
+}
+
+function hasControlCharacters(value: string): boolean {
+  // oxlint-disable-next-line no-control-regex -- Reject terminal escape/control injection at the config boundary.
+  return /[\u0000-\u001f\u007f]/u.test(value);
+}
+
+function parsePrefix(value: JsonValue | undefined): Result<string | undefined, KeymapUnavailable> {
+  if (value === undefined) return ok(undefined);
+  return isString(value) && value.trim() !== "" && !hasControlCharacters(value)
+    ? ok(value) : err(unavailable("keys.prefix must be a nonempty string without control characters"));
+}
+
+function parseBindings(value: JsonValue): ReadonlyArray<string> | undefined {
+  const values = isString(value) ? [value] : value;
+  if (!isJsonArray(values)) return undefined;
+  const out: string[] = [];
+  for (const binding of values) {
+    if (!isString(binding) || hasControlCharacters(binding)) return undefined;
+    if (binding !== "") out.push(binding);
+  }
+  return out;
+}
+
+function projectKeys(value: JsonValue): Result<KeyOverrides, KeymapUnavailable> {
+  if (!isJsonObject(value)) return err(unavailable("root must be a table"));
+  const keys = value["keys"] ?? {};
+  if (!isJsonObject(keys)) return err(unavailable("keys must be a table"));
+  // Older [keys.indexed] semantics are intentionally not guessed.
+  if (keys["indexed"] !== undefined) return err(unavailable("migrate legacy [keys.indexed] to explicit switch_tab/switch_workspace bindings"));
+  const bindings = new Map<HerdrActionId, ReadonlyArray<string>>();
+  for (const [id, raw] of Object.entries(keys)) {
+    if (!isHerdrActionId(id)) continue;
+    const parsed = parseBindings(raw);
+    if (parsed === undefined) return err(unavailable(`keys.${id} must be a binding string or string array`));
+    bindings.set(id, parsed);
+  }
+  const prefix = parsePrefix(keys["prefix"]);
+  return prefix._tag === "err" ? prefix : ok({ prefix: prefix.value, bindings });
+}
+
+/** Parse full TOML syntax at the boundary, including quoted keys and multiline arrays. */
+export function parseKeyOverrides(toml: string): Result<KeyOverrides, KeymapUnavailable> {
+  try {
+    // JSON projection keeps TOML dates and other irrelevant table values out of the core.
+    const projected = parseJsonText("Herdr TOML projection", JSON.stringify(parseToml(toml)));
+    return projected._tag === "err" ? err(unavailable("TOML could not be projected")) : projectKeys(projected.value);
+  } catch (cause) {
+    const location = cause instanceof TomlError ? ` at line ${cause.line}, column ${cause.column}` : "";
+    // Parser exceptions can contain config source (including secrets); never log their message.
+    return err(unavailable(`invalid TOML${location}`));
+  }
+}
+
+/** Keymap and source fingerprint captured together for explicit reload acknowledgment. */
+export type LoadedKeymap = { readonly keymap: Keymap; readonly fingerprint: string };
+
+/** Read configured bindings without silently replacing errors with defaults. */
+export async function loadKeymap(path: string): Promise<Result<LoadedKeymap, KeymapUnavailable>> {
+  const read = await readTextFile(path);
+  if (read._tag === "err") return err(unavailable(read.error.message));
+  const text = read.value ?? "";
+  const parsed = parseKeyOverrides(text);
+  return parsed._tag === "err" ? parsed : ok({
+    keymap: buildKeymap(parsed.value),
+    fingerprint: createHash("sha256").update(text).digest("hex"),
+  });
+}

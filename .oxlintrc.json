@@ -1,0 +1,134 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "promise",
+    "node",
+    "import"
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error",
+    "pedantic": "off",
+    "style": "off",
+    "restriction": "off",
+    "nursery": "off"
+  },
+  "rules": {
+    "eslint/complexity": [
+      "error",
+      {
+        "max": 10
+      }
+    ],
+    "eslint/max-depth": [
+      "error",
+      {
+        "max": 3
+      }
+    ],
+    "eslint/max-params": [
+      "error",
+      {
+        "max": 6
+      }
+    ],
+    "eslint/max-lines-per-function": [
+      "error",
+      {
+        "max": 90,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
+    "eslint/max-nested-callbacks": [
+      "error",
+      {
+        "max": 3
+      }
+    ],
+    "eslint/max-lines": [
+      "error",
+      {
+        "max": 600,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
+    "eslint/no-console": "error",
+    "eslint/eqeqeq": "error",
+    "eslint/no-var": "error",
+    "eslint/prefer-const": "error",
+    "eslint/no-fallthrough": "error",
+    "eslint/default-case-last": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/consistent-type-imports": "error",
+    "typescript/prefer-as-const": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/no-array-reduce": "error",
+    "unicorn/prefer-string-slice": "error",
+    "unicorn/prefer-number-properties": "error",
+    "promise/no-return-wrap": "error",
+    "promise/param-names": "error",
+    "import/no-cycle": "error",
+    "import/no-self-import": "error",
+    "import/no-duplicates": "error",
+    "import/no-default-export": "error",
+    "oxc/no-barrel-file": "error",
+    "node/no-exports-assign": "error",
+    "eslint/no-underscore-dangle": "off",
+    "eslint/no-await-in-loop": "off",
+    "anti-slop/no-chained-type-assertions": "error",
+    "anti-slop/no-conditional-empty-object-spread": "error",
+    "anti-slop/no-known-value-widening": "error",
+    "anti-slop/no-module-mocking": "error",
+    "anti-slop/no-object-parameters": "error",
+    "anti-slop/no-reflect-apply": "error",
+    "anti-slop/no-reflect-get": "error",
+    "anti-slop/no-runtime-typeof": [
+      "error",
+      {
+        "allowInTypeGuards": true
+      }
+    ],
+    "anti-slop/no-shape-in-symbol-names": "error",
+    "anti-slop/no-unknown-parameters": "error",
+    "anti-slop/no-unknown-returns": "error",
+    "anti-slop/no-unknown-type-aliases": "error",
+    "anti-slop/no-unsafe-dictionary-type": "error",
+    "anti-slop/no-widen-then-assert": "error",
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
+    "local/no-classes": "error"
+  },
+  "ignorePatterns": [
+    "node_modules/**",
+    ".agent/**",
+    ".agents/**",
+    ".claude/**",
+    ".codex/**",
+    ".continue/**",
+    ".cursor/**",
+    ".gemini/**",
+    ".opencode/**",
+    ".pi/**",
+    ".roo/**",
+    ".windsurf/**",
+    "tools/oxlint/anti-slop/**",
+    "tools/oxlint/local/**",
+    "src/input-monitor.macos.js"
+  ],
+  "jsPlugins": [
+    {
+      "name": "anti-slop",
+      "specifier": "./tools/oxlint/anti-slop/index.ts"
+    },
+    {
+      "name": "local",
+      "specifier": "./tools/oxlint/local/index.ts"
+    }
+  ]
+}

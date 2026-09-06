@@ -1,0 +1,56 @@
+id = "roshvan.shortcut-shepherd"
+name = "Shortcut Shepherd"
+version = "0.2.0-alpha.1"
+min_herdr_version = "0.8.0"
+description = "Rank inferred Herdr actions and suggest configured shortcuts. Optional local macOS input estimates; session-local stats and controls."
+platforms = ["linux", "macos", "windows"]
+
+[[build]]
+command = ["pnpm", "install", "--prod", "--frozen-lockfile", "--ignore-scripts"]
+
+[[startup]]
+command = ["node", "src/actions/start.ts"]
+
+[[actions]]
+id = "stats"
+title = "Show shortcut stats"
+contexts = ["workspace", "tab", "pane"]
+command = ["node", "src/actions/stats.ts"]
+
+[[actions]]
+id = "pause"
+title = "Pause shortcut nudges"
+command = ["node", "src/actions/pause.ts"]
+
+[[actions]]
+id = "resume"
+title = "Resume shortcut nudges"
+command = ["node", "src/actions/resume.ts"]
+
+[[actions]]
+id = "reset"
+title = "Reset shortcut stats"
+command = ["node", "src/actions/reset.ts"]
+
+[[actions]]
+id = "start"
+title = "Start shortcut watcher"
+command = ["node", "src/actions/start.ts"]
+
+[[actions]]
+id = "stop"
+title = "Stop shortcut watcher"
+command = ["node", "src/actions/stop.ts"]
+
+[[actions]]
+id = "refresh-keys"
+title = "Refresh configured shortcuts (after Herdr config reload)"
+command = ["node", "src/actions/refresh-keys.ts"]
+
+[[panes]]
+id = "stats"
+title = "Shortcut Shepherd"
+placement = "popup"
+width = "80%"
+height = "80%"
+command = ["node", "src/stats-pane.ts"]

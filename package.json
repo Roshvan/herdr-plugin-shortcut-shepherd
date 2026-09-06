@@ -1,0 +1,28 @@
+{
+  "name": "herdr-plugin-shortcut-shepherd",
+  "version": "0.2.0-alpha.1",
+  "private": true,
+  "license": "MIT",
+  "description": "Session-local Herdr action statistics and configured shortcut suggestions, with optional local input estimates.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18",
+    "pnpm": ">=11.25"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "check": "pnpm typecheck && pnpm lint"
+  },
+  "devDependencies": {
+    "@oxlint/plugins": "1.81.0",
+    "@types/node": "^26.4.1",
+    "oxlint": "^1.81.0",
+    "typescript": "^7.0.2"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "dependencies": {
+    "smol-toml": "1.8.0",
+    "string-width": "8.1.0"
+  }
+}
