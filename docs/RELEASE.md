@@ -8,8 +8,8 @@ pnpm check
 ```
 
 `pnpm check` runs typecheck and lint only. There are no automated tests, fixtures, or runners,
-as requested by the owner. `.github/workflows/check.yml` applies those static checks on
-macOS/Linux/Windows and Node 22.18.0/24/26. Passing them does not certify runtime behavior.
+as requested by the owner. Run the static checks with supported Node releases before publishing;
+passing them does not certify runtime behavior on macOS, Linux, or Windows.
 
 The manifest's production dependency command is:
 

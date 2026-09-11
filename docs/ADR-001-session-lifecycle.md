@@ -107,8 +107,8 @@ trade-off against a zero-runtime-dependency implementation with incorrect bounda
 ## Static checks and release scope
 
 The owner requested no tests. The repository contains no automated test suite, fixtures, or runner;
-`pnpm check` and CI perform typecheck/lint only. CI is configured for macOS/Linux/Windows and Node
-22.18/24/26, but static checks do not certify runtime behavior.
+`pnpm check` performs typecheck/lint only. The supported macOS/Linux/Windows and Node 22.18/24/26
+combinations still require operational verification; static checks do not certify runtime behavior.
 
 A real macOS Herdr run-through on Node 22.18 covered startup, repeated start, subscription rotation,
 popup controls, configuration/binding refresh, input-helper start/stop, pending-event shutdown, and
