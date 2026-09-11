@@ -1,4 +1,4 @@
-# Release checklist — 0.2.0-alpha.1
+# Release checklist — 0.2.0-alpha.2
 
 ## Static checks only
 
@@ -42,16 +42,16 @@ Normal Herdr configuration and user state were kept separate from that review.
 ## Repository status
 
 - Source: [roshvan/herdr-plugin-shortcut-shepherd](https://github.com/roshvan/herdr-plugin-shortcut-shepherd).
-- Visibility: **private**. Use an authenticated clone and local link; no public release is implied.
-- Topic: `herdr-plugin`. Private repositories are not discoverable through the public marketplace.
+- Visibility: **public**. Install from GitHub with the command documented in the README.
+- Topic: `herdr-plugin`. Public marketplace discovery still needs verification after the release tag is published.
 - The root MIT license and the vendored anti-slop MIT attribution/notice are included.
 - `.gitignore` excludes local notes, obsolete screenshots, runtime state, environment files,
   credentials, and dependencies. These do not belong in the initial source snapshot.
 
-## Before a public release
+## Before a stable release
 
 - [ ] Complete the operational review above, or narrow the declared compatibility accordingly.
-- [ ] Review source/history for private data before deliberately changing repository visibility.
+- [x] Review source/history for private data before publishing the repository.
 - [ ] Keep manifest/package versions consistent and retain the dependency lockfile.
 - [ ] Tag a reviewed release and verify direct Herdr installation against that revision.
 - [ ] Update the README's private-repository instructions only after public installation succeeds.

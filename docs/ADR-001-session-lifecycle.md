@@ -1,6 +1,6 @@
 # ADR 001: Explicit session ownership and conservative attribution
 
-Status: accepted for 0.2.0-alpha.1.
+Status: accepted for 0.2.0-alpha.2.
 
 ## Context and existing seams checked
 
@@ -79,10 +79,13 @@ successful resnapshot before counting; activity during this conservative recover
 
 ### Attribution is a capability, not inferred certainty
 
-Monitoring defaults off. Unknown events are counted separately and never nudge or count as keyboard
-success. The optional local macOS helper estimates preceding global input only; future typing no
-longer changes past attribution and near-ties remain unknown. Input histories are regularly pruned.
-The popup says Mouse~/Keys~/Unknown rather than claiming verified shortcut hits or slow use.
+Monitoring defaults off. Unknown events are counted separately and default to record-only rather than
+counting as keyboard success. Users who explicitly select `unattributedActions: "remind"` receive
+sparse reminders for those events; this can repeat a shortcut the user already used, so it is never
+enabled by the package default. The optional local macOS helper estimates preceding global input only;
+future typing no longer changes past attribution and near-ties remain unknown. Input histories are
+regularly pruned. The popup says Mouse~/Keys~/Unknown rather than claiming verified shortcut hits or
+slow use.
 
 SSH/remote clients are not observable through the server's OS helper. Even local estimates can mix
 other applications or keyboard-driven menus with shortcut activity. Exact metrics require upstream

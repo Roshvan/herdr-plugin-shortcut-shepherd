@@ -1,6 +1,7 @@
 {
   "enabled": true,
   "inputMonitoring": "off",
+  "unattributedActions": "record-only",
   "position": "bottom-right",
   "suppressed": []
 }

@@ -216,6 +216,7 @@ function withNudge(stats: Stats, id: HerdrActionId, entry: ActionStats, now: num
 
 type SkipInput = {
   readonly entry: ActionStats;
+  readonly occurrenceCount: number;
   readonly bound: boolean;
   readonly id: HerdrActionId;
   readonly recentNudges: ReadonlyArray<number>;
@@ -248,13 +249,13 @@ function shouldNudgeUnbound(count: number): boolean {
 }
 
 function backoffSkip(input: SkipInput): SkipReason | undefined {
-  const { entry } = input;
+  const { entry, occurrenceCount } = input;
   if (input.bound && shortcutIsLearned(entry)) return "learned";
   if (!input.bound) {
-    if (entry.count < POLICY.suggestBindingAfter) return "unbound-not-yet";
-    return shouldNudgeUnbound(entry.count) ? undefined : "backoff";
+    if (occurrenceCount < POLICY.suggestBindingAfter) return "unbound-not-yet";
+    return entry.nudges === 0 || shouldNudgeUnbound(occurrenceCount) ? undefined : "backoff";
   }
-  return isPowerOfTwo(entry.count) ? undefined : "backoff";
+  return entry.nudges === 0 || isPowerOfTwo(occurrenceCount) ? undefined : "backoff";
 }
 
 function decideSkip(input: SkipInput, settings: PluginConfig, control: Control): SkipReason | undefined {
@@ -262,10 +263,10 @@ function decideSkip(input: SkipInput, settings: PluginConfig, control: Control):
 }
 
 /** Describe an equivalent configured shortcut without asserting which shortcut was invoked. */
-export function composeNudge(detection: Detection, entry: ActionStats, keymap: Keymap): Nudge {
+export function composeNudge(detection: Detection, occurrenceCount: number, keymap: Keymap): Nudge {
   const spec = actionSpec(detection.action);
   const bindings = bindingsFor(keymap, detection.action);
-  const times = entry.count === 1 ? "once" : `${entry.count}×`;
+  const times = occurrenceCount === 1 ? "once" : `${occurrenceCount}×`;
   if (bindings.length === 0) {
     return {
       title: `Bind ${spec.id} in Herdr`,
@@ -289,22 +290,25 @@ export type ApplyInput = {
   readonly now: number;
 };
 
-/** Count the classified action and decide whether estimated mouse activity warrants a reminder. */
+/** Count the classified action and decide whether its configured shortcut warrants a reminder. */
 export function applyDetection(stats: Stats, input: ApplyInput): PolicyOutcome {
   const { detection, settings, control, keymap, now } = input;
   const bumped = bump(stats, detection.action, input.source, now);
-  if (input.source === "unknown") return { stats: bumped.stats, nudge: undefined, skipped: "unknown-input" };
+  if (input.source === "unknown" && settings.unattributedActions === "record-only") {
+    return { stats: bumped.stats, nudge: undefined, skipped: "unknown-input" };
+  }
   if (input.source === "key") return { stats: bumped.stats, nudge: undefined, skipped: "keyboard-estimate" };
+  const occurrenceCount = input.source === "unknown" ? bumped.entry.unknown : bumped.entry.count;
   const bound = bindingsFor(keymap, detection.action).length > 0;
   const skipped = decideSkip(
-    { entry: bumped.entry, bound, id: detection.action, recentNudges: bumped.stats.recentNudges, now },
+    { entry: bumped.entry, occurrenceCount, bound, id: detection.action, recentNudges: bumped.stats.recentNudges, now },
     settings,
     control,
   );
   if (skipped !== undefined) return { stats: bumped.stats, nudge: undefined, skipped };
   return {
     stats: withNudge(bumped.stats, detection.action, bumped.entry, now),
-    nudge: composeNudge(detection, bumped.entry, keymap),
+    nudge: composeNudge(detection, occurrenceCount, keymap),
     skipped: undefined,
   };
 }

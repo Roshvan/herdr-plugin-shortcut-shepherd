@@ -119,15 +119,21 @@ function footerLines(ui: StatsUi, compact: boolean): string[] {
   return footer;
 }
 
+function describeModes(view: StatsView): string {
+  const nudgeMode = !view.settings.enabled ? "nudges disabled" : view.control.paused ? "nudges paused" : "nudges on";
+  const unknownMode = view.settings.unattributedActions === "remind" ? "unknown reminders on" : "unknown record-only";
+  return `${nudgeMode} · ${unknownMode}`;
+}
+
 /** Render within explicit viewport bounds using the existing terminal theme and keyboard affordances. */
 export function renderStatsView(view: StatsView, ui: StatsUi, columns: number, height: number): string {
   const width = Math.max(1, columns - 1);
   const rows = viewRows(view);
-  const mode = !view.settings.enabled ? "nudges disabled" : view.control.paused ? "nudges paused" : "nudges on";
+  const modes = describeModes(view);
   const compact = width < 70;
   const header = [
     `Shortcut Shepherd · session ${view.sessionId.slice(0, 8)}`,
-    `${view.connection} · input: ${view.inputMode} · ${mode}`,
+    `${view.connection} · input: ${view.inputMode} · ${modes}`,
     compact ? "M~/K~ = estimates. ? = unknown." : "Mouse~/Keys~ estimate local activity, not shortcuts. ? = unknown.",
     compact ? "Reload Herdr, then [b] refresh keys." : "Configured shortcuts; reload Herdr before [b] refresh.",
   ];

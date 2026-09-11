@@ -1,6 +1,6 @@
 {
   "name": "herdr-plugin-shortcut-shepherd",
-  "version": "0.2.0-alpha.1",
+  "version": "0.2.0-alpha.2",
   "private": true,
   "license": "MIT",
   "description": "Session-local Herdr action statistics and configured shortcut suggestions, with optional local input estimates.",

@@ -1,6 +1,6 @@
 id = "roshvan.shortcut-shepherd"
 name = "Shortcut Shepherd"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 min_herdr_version = "0.8.0"
 description = "Rank inferred Herdr actions and suggest configured shortcuts. Optional local macOS input estimates; session-local stats and controls."
 platforms = ["linux", "macos", "windows"]

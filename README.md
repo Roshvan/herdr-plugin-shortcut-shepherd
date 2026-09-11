@@ -16,7 +16,7 @@ Herdr installs the plugin's dependencies for you.
 
 ## Use
 
-With Herdr running, start the watcher and open your shortcut stats:
+The watcher starts with Herdr. You can also start it explicitly and open your shortcut stats:
 
 ```sh
 herdr plugin action invoke roshvan.shortcut-shepherd.start
@@ -25,8 +25,26 @@ herdr plugin action invoke roshvan.shortcut-shepherd.stats
 
 Use the arrow keys to browse and `q` to close.
 
-To enable reminders on a local Mac, set `inputMonitoring` to `local-estimate` in the plugin's `config.json`. Find its directory with:
+Find the plugin's `config.json` with:
 
 ```sh
 herdr plugin config-dir roshvan.shortcut-shepherd
 ```
+
+The safe defaults record actions without reminders when their input source is unknown. A local Mac can estimate mouse versus keyboard activity:
+
+```json
+{
+  "inputMonitoring": "local-estimate"
+}
+```
+
+Herdr's lifecycle API does not report whether an action came from a mouse, shortcut, remote client, or automation. To receive sparse reminders anyway—including on Linux, Windows, and remote servers—explicitly opt in:
+
+```json
+{
+  "unattributedActions": "remind"
+}
+```
+
+This mode may remind you after an action that you already performed with its shortcut. Use `"record-only"` to disable those unattributed reminders.

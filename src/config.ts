@@ -9,14 +9,16 @@ export type ToastPosition = "top-left" | "top-right" | "bottom-left" | "bottom-r
 export type PluginConfig = {
   readonly enabled: boolean;
   readonly inputMonitoring: "off" | "local-estimate";
+  readonly unattributedActions: "record-only" | "remind";
   readonly position: ToastPosition;
   readonly suppressed: ReadonlySet<HerdrActionId>;
 };
 
-/** Safe defaults: input monitoring is off and unknown actions never nudge. */
+/** Safe defaults: input monitoring is off and unattributed actions never nudge. */
 export const DEFAULT_CONFIG: PluginConfig = {
   enabled: true,
   inputMonitoring: "off",
+  unattributedActions: "record-only",
   position: "bottom-right",
   suppressed: new Set(),
 };
@@ -55,6 +57,18 @@ function readSuppressed(obj: JsonObject): Result<ReadonlySet<HerdrActionId>, Inv
   return ok(out);
 }
 
+function readInputMonitoring(obj: JsonObject): Result<PluginConfig["inputMonitoring"], InvalidConfig> {
+  const value = obj["inputMonitoring"];
+  if (value === undefined) return ok(DEFAULT_CONFIG.inputMonitoring);
+  return value === "off" || value === "local-estimate" ? ok(value) : err(invalidConfig("inputMonitoring"));
+}
+
+function readUnattributedActions(obj: JsonObject): Result<PluginConfig["unattributedActions"], InvalidConfig> {
+  const value = obj["unattributedActions"];
+  if (value === undefined) return ok(DEFAULT_CONFIG.unattributedActions);
+  return value === "record-only" || value === "remind" ? ok(value) : err(invalidConfig("unattributedActions"));
+}
+
 /** Parse shared settings, retaining explicit off/unknown attribution semantics. */
 export function parseConfig(value: JsonValue | undefined): Result<PluginConfig, InvalidConfig> {
   if (value === undefined) return ok(DEFAULT_CONFIG);
@@ -65,9 +79,12 @@ export function parseConfig(value: JsonValue | undefined): Result<PluginConfig, 
   if (position._tag === "err") return position;
   const suppressed = readSuppressed(value);
   if (suppressed._tag === "err") return suppressed;
-  const inputMonitoring = value["inputMonitoring"] === undefined ? DEFAULT_CONFIG.inputMonitoring : value["inputMonitoring"];
-  if (inputMonitoring !== "off" && inputMonitoring !== "local-estimate") return err(invalidConfig("inputMonitoring"));
-  return ok({ enabled: enabled.value, inputMonitoring, position: position.value, suppressed: suppressed.value });
+  const inputMonitoring = readInputMonitoring(value);
+  if (inputMonitoring._tag === "err") return inputMonitoring;
+  const unattributedActions = readUnattributedActions(value);
+  if (unattributedActions._tag === "err") return unattributedActions;
+  return ok({ enabled: enabled.value, inputMonitoring: inputMonitoring.value, unattributedActions: unattributedActions.value,
+    position: position.value, suppressed: suppressed.value });
 }
 
 /** Serialize shared settings for display/status without runtime handles. */
@@ -75,6 +92,7 @@ export function configToJson(config: PluginConfig) {
   return {
     enabled: config.enabled,
     inputMonitoring: config.inputMonitoring,
+    unattributedActions: config.unattributedActions,
     position: config.position,
     suppressed: [...config.suppressed].toSorted(),
   };
