@@ -39,7 +39,7 @@ The safe defaults record actions without reminders when their input source is un
 }
 ```
 
-Herdr's lifecycle API does not report whether an action came from a mouse, shortcut, remote client, or automation. To receive sparse reminders anyway—including on Linux, Windows, and remote servers—explicitly opt in:
+Herdr's lifecycle API does not report whether an action came from a mouse, shortcut, remote client, or automation. In Herdr 0.9+, clients can focus different views of the same session, so Shepherd observes session-wide lifecycle actions instead of filtering them through one client's focus. To receive sparse reminders anyway—including on Linux, Windows, and remote servers—explicitly opt in:
 
 ```json
 {

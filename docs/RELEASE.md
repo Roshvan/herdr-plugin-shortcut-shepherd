@@ -1,4 +1,4 @@
-# Release checklist — 0.2.0-alpha.2
+# Release checklist — 0.2.0-alpha.3
 
 ## Static checks only
 
@@ -22,8 +22,10 @@ pnpm install --prod --frozen-lockfile --ignore-scripts
 On macOS with Node 22.18 and Herdr 0.8.2-preview, an isolated configuration/session covered native
 GitHub installation, the updated local checkout's startup and repeated start, subscription rotation,
 the real stats popup, pause/mute controls, binding reload, input-helper start/stop, shutdown immediately
-after an action, and restart with saved statistics. No automated tests or fixtures were introduced.
-Normal Herdr configuration and user state were kept separate from that review.
+after an action, and restart with saved statistics. On macOS with Node 26 and Herdr 0.9.0, a live
+multi-view session covered a split in a tab that differed from the snapshot's global focus projection.
+No automated tests or fixtures were introduced. Normal Herdr configuration and user state were kept
+separate from the initial release review.
 
 ## Operational review before release
 

@@ -1,6 +1,6 @@
 # ADR 001: Explicit session ownership and conservative attribution
 
-Status: accepted for 0.2.0-alpha.2.
+Status: accepted for 0.2.0-alpha.3.
 
 ## Context and existing seams checked
 
@@ -88,8 +88,13 @@ regularly pruned. The popup says Mouse~/Keys~/Unknown rather than claiming verif
 slow use.
 
 SSH/remote clients are not observable through the server's OS helper. Even local estimates can mix
-other applications or keyboard-driven menus with shortcut activity. Exact metrics require upstream
-Herdr action/invocation provenance; this release does not manufacture it.
+other applications or keyboard-driven menus with shortcut activity. Herdr 0.9+ permits clients to
+focus different views of the same session, but lifecycle events carry no client identity and the
+session snapshot exposes only one focus projection. Inference therefore observes session-wide tab
+and pane lifecycle actions instead of discarding them against that projection. This avoids missing
+genuine actions from another client at the cost of counting some background or automated actions;
+cascade/storm filtering and the unattributed-action policy remain the conservative gates.
+Exact metrics require upstream Herdr action/invocation provenance; this release does not manufacture it.
 
 ### Parse configuration fully; don't imply runtime verification
 

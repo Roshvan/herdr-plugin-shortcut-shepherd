@@ -221,14 +221,6 @@ function near(
   );
 }
 
-function isOnScreen(state: InferenceState, workspaceId: WorkspaceId, tabId?: TabId): boolean {
-  if (state.focusedWorkspace === undefined) return true;
-  if (state.focusedWorkspace !== workspaceId) return false;
-  if (tabId === undefined) return true;
-  const focusedTab = state.focusedTabByWorkspace.get(workspaceId);
-  return focusedTab === undefined || focusedTab === tabId;
-}
-
 function nearWorkspaceStructure(state: InferenceState, at: number, workspaceId: WorkspaceId): boolean {
   return near(
     state,
@@ -270,14 +262,10 @@ function evaluateWorkspaceEvent(state: InferenceState, event: HerdrEvent, at: nu
   }
 }
 
-function tabEventWorkspace(event: HerdrEvent): WorkspaceId | undefined {
-  if (event.type === "tab_created") return event.tab.workspaceId;
-  return "workspaceId" in event ? event.workspaceId : undefined;
-}
-
+// Lifecycle events are session-wide while Herdr 0.9+ focus is client-local. The
+// stream carries no client identity, so a snapshot's single focus projection
+// cannot safely decide whether another client's action was visible.
 function evaluateTabEvent(state: InferenceState, event: HerdrEvent, at: number): Detection | undefined {
-  const workspaceId = tabEventWorkspace(event);
-  if (workspaceId !== undefined && !isOnScreen(state, workspaceId)) return undefined;
   switch (event.type) {
     case "tab_created":
       return nearWorkspaceStructure(state, at, event.tab.workspaceId) ? undefined : { action: "new_tab" };
@@ -297,16 +285,12 @@ function evaluateTabEvent(state: InferenceState, event: HerdrEvent, at: number):
 function evaluatePaneEvent(state: InferenceState, event: HerdrEvent, at: number): Detection | undefined {
   switch (event.type) {
     case "pane_created":
-      if (!isOnScreen(state, event.pane.workspaceId, event.pane.tabId)) return undefined;
       return evaluatePaneCreated(state, event.pane, at);
     case "pane_closed":
-      if (!isOnScreen(state, event.workspaceId, state.tabOfPane.get(event.paneId))) return undefined;
       return evaluatePaneClosed(state, event.paneId, event.workspaceId, at);
     case "pane_focused":
-      if (!isOnScreen(state, event.workspaceId, state.tabOfPane.get(event.paneId))) return undefined;
       return evaluatePaneFocused(state, event.paneId, event.workspaceId, at);
     case "layout_updated":
-      if (!isOnScreen(state, event.layout.workspaceId, event.layout.tabId)) return undefined;
       return evaluateLayoutUpdated(state, event.layout, at);
     default:
       return undefined;
